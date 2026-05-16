@@ -3,7 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
-const { Event, Category } = require('../models');
+const { Event, Category, File } = require('../models');
 const {
   createEventWithCategory,
   updateEventWithCategory,
@@ -104,6 +104,13 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: '事件不存在' });
     }
 
+    // 获取与文件 URL 对应的文件记录（包括 ID）
+    let fileMeta = [];
+    if (event.files && event.files.length) {
+      const files = await File.findAll({ where: { url: event.files } });
+      fileMeta = files.map(f => ({ id: f.id, url: f.url }));
+    }
+
     res.json({
       id: event.id,
       title: event.title,
@@ -118,7 +125,8 @@ router.get('/:id', auth, async (req, res) => {
         level2: event.typeLevel2,
         level3: event.typeLevel3
       },
-      files: event.files
+      files: event.files,
+      fileMeta // 新增字段，前端可用于删除时定位 ID
     });
   } catch (error) {
     console.error('获取事件详情失败:', error);
@@ -138,6 +146,7 @@ router.post('/', auth, [
   }
 
   const { title, content, startDate, endDate, result, status, type, categoryId, files } = req.body;
+  console.log('创建事件 - files:', files);
 
   try {
     let event;

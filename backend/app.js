@@ -1,5 +1,6 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 
 // 强制要求 JWT_SECRET 在启动时存在，避免使用弱默认密钥
 if (!process.env.JWT_SECRET) {
@@ -22,11 +23,10 @@ const app = express();
 // 中间件
 app.use(cors());
 app.use(helmet());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb', parameterLimit: 50000 }));
 
-// 静态文件服务
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// 静态文件服务（已迁移到 Cloudflare R2）
 
 // 速率限制
 const limiter = rateLimit({
@@ -109,6 +109,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.use('/api/user', require('./routes/user'));
 app.use('/api/events', require('./routes/event'));
 app.use('/api/categories', require('./routes/category'));
+app.use('/api/file', require('./routes/file'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/statistics', require('./routes/statistics'));
 

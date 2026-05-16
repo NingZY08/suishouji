@@ -100,9 +100,13 @@ async function findCategoryIdByType(type) {
  * @returns {Promise<Event>} 创建的事件
  */
 async function createEventWithCategory(eventData) {
+  console.log('createEventWithCategory - 接收到的 eventData:', eventData);
   let event = Event.build(eventData);
+  console.log('createEventWithCategory - build 后的 event:', event.dataValues);
   event = await populateCategoryFields(event);
+  console.log('createEventWithCategory - populateCategoryFields 后的 event:', event.dataValues);
   await event.save();
+  console.log('createEventWithCategory - save 后的 event:', event.dataValues);
   return event;
 }
 

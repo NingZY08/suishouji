@@ -50,25 +50,30 @@
           <el-input v-model="eventForm.result" type="textarea" rows="3" placeholder="请输入事件结果" maxlength="500"></el-input>
         </el-form-item>
         <el-form-item label="相关插图、文件">
+          <div v-if="eventForm.files.length > 0" style="margin-bottom: 10px; color: #67c23a;">
+            已上传 {{ eventForm.files.length }} 个文件
+          </div>
           <el-upload
-            class="upload-demo"
-            action="/api/upload"
-            :headers="{ Authorization: `Bearer ${userStore.token}` }"
-            :on-success="handleUploadSuccess"
+            :auto-upload="false"
+            :on-change="handleFileChange"
+            :on-preview="handlePreview"
             :on-remove="handleRemove"
             :file-list="fileList"
+            list-type="picture-card"
+            ref="uploadRef"
             multiple
             :limit="5"
             :on-exceed="handleExceed"
             accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.csv,.ppt,.pptx"
           >
-            <el-button type="primary">点击上传</el-button>
-            <template #tip>
-              <div class="el-upload__tip">
-                支持上传图片、文档(Word/Excel/PPT)、PDF等格式，单文件不超过 10MB，最多上传 5 个文件
-              </div>
-            </template>
+            <el-icon><Plus /></el-icon>
           </el-upload>
+          <el-button type="primary" size="small" @click="submitUpload" style="margin-top: 10px;" :loading="uploading">
+            {{ uploading ? '上传中...' : '上传文件' }}
+          </el-button>
+          <el-dialog v-model="previewVisible" title="图片预览" width="800px" append-to-body>
+            <img :src="previewUrl" alt="预览图片" style="width: 100%" />
+          </el-dialog>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSubmit" :loading="loading">保存</el-button>
@@ -88,6 +93,7 @@ import { useEventStore } from '../store/modules/event'
 import { useUserStore } from '../store/modules/user'
 import axios from '../utils/axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 
 interface Category {
   id: number
@@ -124,6 +130,10 @@ const eventForm = reactive({
 })
 
 const fileList = ref<any[]>([])
+const previewVisible = ref(false)
+const previewUrl = ref('')
+const uploading = ref(false)
+const uploadRef = ref()
 
 const rules = {
   title: [
@@ -187,24 +197,156 @@ const updateCategoryId = () => {
   }
 }
 
-const handleUploadSuccess = (response: any, file: any) => {
-  eventForm.files.push(response.url)
-  fileList.value.push({
-    name: file.name,
-    url: response.url
+const handleFileChange = (file: any, files: any) => {
+  fileList.value = files.map((f: any) => {
+    const existing = fileList.value.find(item => item.uid === f.uid)
+    return {
+      name: f.name,
+      url: f.url || '',
+      raw: f.raw,
+      uid: f.uid,
+      id: existing?.id
+    }
   })
 }
 
+const handleUploadSuccess = (response: any, file: any) => {
+  console.log('上传成功，响应:', response)
+  console.log('上传成功，文件:', file)
+
+  if (response && response.url) {
+    // 将文件信息加入列表，包含文件 ID（用于后续删除）以及 uid
+    fileList.value.push({
+      name: file.name,
+      url: response.url,
+      id: response.fileId,
+      uid: file.uid
+    })
+    eventForm.files.push(response.url)
+    // 根据是否重复给出不同提示
+    if (response.duplicate) {
+      ElMessage.warning(`文件 ${file.name} 已存在，使用已有文件`)
+    } else {
+      ElMessage.success(`文件 ${file.name} 上传成功`)
+    }
+  } else {
+    console.error('上传响应格式错误:', response)
+    ElMessage.error('上传响应格式错误')
+  }
+}
+
 const handleRemove = (file: any) => {
-  const index = fileList.value.findIndex(item => item.name === file.name)
-  if (index !== -1) {
+  const index = fileList.value.findIndex(item => {
+    if (file.url && item.url === file.url) return true
+    if (file.uid && item.uid === file.uid) return true
+    if (file.id && item.id === file.id) return true
+    return false
+  })
+  if (index === -1) return
+  const removed = fileList.value[index]
+
+  if (removed.id) {
+    ElMessageBox.confirm('确定要删除该文件吗？此操作不可恢复。', '删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).then(async () => {
+      try {
+        const resp = await axios.delete(`/api/file/${removed.id}`)
+        const { referenced } = resp.data
+        if (referenced) {
+          fileList.value.splice(index, 1)
+          const urlIdx = eventForm.files.indexOf(removed.url)
+          if (urlIdx !== -1) eventForm.files.splice(urlIdx, 1)
+          ElMessage.warning('文件被其他事件引用，仅在当前编辑中移除')
+        } else {
+          fileList.value.splice(index, 1)
+          const urlIdx = eventForm.files.indexOf(removed.url)
+          if (urlIdx !== -1) eventForm.files.splice(urlIdx, 1)
+          ElMessage.success('文件已删除')
+        }
+      } catch (e: any) {
+        console.error('删除失败:', e)
+        const msg = e?.response?.data?.message || '文件删除失败'
+        ElMessage.error(msg)
+      }
+    }).catch(() => {
+      // 用户取消
+    })
+  } else {
     fileList.value.splice(index, 1)
-    eventForm.files.splice(index, 1)
+  }
+}
+
+const submitUpload = async () => {
+  const uploadFiles = fileList.value.filter(f => !f.url || !f.url.startsWith('https://'))
+
+  if (uploadFiles.length === 0) {
+    ElMessage.info('没有需要上传的文件')
+    return
+  }
+
+  uploading.value = true
+
+  try {
+    const uploadPromises = uploadFiles.map(async (file) => {
+      const formData = new FormData()
+      formData.append('file', file.raw)
+
+      const response = await axios.post('/api/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+
+      return { file, response }
+    })
+
+    const results = await Promise.all(uploadPromises)
+
+    for (const { file, response } of results) {
+      if (response.data && response.data.url) {
+        const index = fileList.value.findIndex(f => f.name === file.name)
+        if (index !== -1) {
+          fileList.value[index].url = response.data.url
+          fileList.value[index].id = response.data.fileId
+        }
+        if (!eventForm.files.includes(response.data.url)) {
+          eventForm.files.push(response.data.url)
+        }
+        if (response.data.duplicate) {
+          ElMessage.warning(`文件 ${file.name} 已存在，使用已有文件`)
+        } else {
+          ElMessage.success(`文件 ${file.name} 上传成功`)
+        }
+      }
+    }
+
+    ElMessage.success(`成功上传 ${uploadFiles.length} 个文件`)
+  } catch (error: any) {
+    console.error('上传失败:', error)
+    ElMessage.error('上传失败: ' + (error?.response?.data?.message || error.message || '未知错误'))
+  } finally {
+    uploading.value = false
   }
 }
 
 const handleExceed = () => {
   ElMessage.warning('最多只能上传5个文件')
+}
+
+const handlePreview = (file: any) => {
+  const url = file.url || (file.response && file.response.url)
+  if (url) {
+    const ext = '.' + (url.split('?')[0].split('.').pop() || '').toLowerCase()
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+    if (imageExts.includes(ext)) {
+      previewUrl.value = url
+      previewVisible.value = true
+    } else {
+      window.open(url, '_blank')
+    }
+  }
 }
 
 const fetchEventDetail = async (id: string) => {
@@ -220,10 +362,16 @@ const fetchEventDetail = async (id: string) => {
     eventForm.categoryId = event.categoryId
     eventForm.type = event.type
     eventForm.files = event.files || []
-    fileList.value = (event.files || []).map((url: string) => ({
-      name: url.split('/').pop(),
-      url
-    }))
+    // 构造 url -> id 的映射表（用于删除操作）
+    const metaMap = new Map((response.data.fileMeta || []).map((item: any) => [item.url, item.id]));
+    fileList.value = (event.files || []).map((url: string) => {
+      const id = metaMap.get(url);
+      return {
+        name: decodeURIComponent(url.split('/').pop() || 'file'),
+        url,
+        id // 可能为 undefined
+      };
+    });
   } catch (error) {
     console.error('获取事件详情失败:', error)
     ElMessage.error('获取事件详情失败')
@@ -248,6 +396,7 @@ const handleSubmit = async () => {
             level3: eventForm.type.level3 || ''
           }
         }
+        console.log('提交数据:', JSON.stringify(submitData, null, 2))
 
         if (isEdit.value) {
           await axios.put(`/api/events/${eventId.value}`, submitData)
@@ -362,5 +511,27 @@ onMounted(() => {
 
 .el-upload {
   width: 100%;
+}
+
+.create-event-container :deep(.el-upload-list--picture-card .el-upload-list__item) {
+  width: 100px;
+  height: 100px;
+}
+
+.create-event-container :deep(.el-upload--picture-card) {
+  width: 100px;
+  height: 100px;
+}
+
+@media (max-width: 768px) {
+  .create-event-container :deep(.el-upload-list--picture-card .el-upload-list__item) {
+    width: 80px;
+    height: 80px;
+  }
+
+  .create-event-container :deep(.el-upload--picture-card) {
+    width: 80px;
+    height: 80px;
+  }
 }
 </style>

@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
   server: {
@@ -9,14 +8,16 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: process.env.VITE_API_BASE_URL || 'http://localhost:3001',
-        changeOrigin: true
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        timeout: 60000
       },
       '/uploads': {
-        target: process.env.VITE_API_BASE_URL || 'http://localhost:3001',
-        changeOrigin: true
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        timeout: 60000
       }
     },
-    allowedHosts: ['1d0dd567.r3.cpolar.cn']
+    allowedHosts: ['7f574d10.r3.cpolar.cn']
   }
 })

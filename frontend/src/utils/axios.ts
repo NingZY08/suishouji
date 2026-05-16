@@ -3,9 +3,8 @@ import { useUserStore } from '../store/modules/user'
 import { ElMessage } from 'element-plus'
 import router from '../router'
 
-// 创建 axios 实例
 const instance = axios.create({
-  timeout: 10000
+  timeout: 60000
 })
 
 // 请求拦截器

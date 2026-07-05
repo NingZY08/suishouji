@@ -18,6 +18,6 @@ export default defineConfig({
         timeout: 60000
       }
     },
-    allowedHosts: ['7f574d10.r3.cpolar.cn']
+    allowedHosts: true
   }
 })

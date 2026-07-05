@@ -2,18 +2,10 @@ const express = require('express');
 const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const path = require('path');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand } = require('@aws-sdk/client-s3');
+const { r2Client, r2Config } = require('../config/r2');
 
 const router = express.Router();
-
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
 
 const processFileName = (originalName) => {
   if (!originalName) return `file_${Date.now()}`;
@@ -104,7 +96,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
   try {
     const command = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET,
+      Bucket: r2Config.bucket,
       Key: r2Key,
       Body: req.file.buffer,
       ContentType: req.file.mimetype,
@@ -112,7 +104,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
     await r2Client.send(command);
 
-    const fileUrl = `https://${process.env.R2_DOMAIN}/${r2Key}`;
+    const fileUrl = `https://${r2Config.domain}/${r2Key}`;
     // 保存文件元数据到数据库
     const newFile = await File.create({
       userId: req.user.userId,

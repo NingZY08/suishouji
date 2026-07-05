@@ -2,20 +2,12 @@
  * 迁移脚本：清理已在 R2 中不存在的文件记录，并同步从 Event 表的 files 数组中移除对应 URL。
  * 运行方式：`node scripts/migrate_orphan_files.js`
  */
-const { S3Client, HeadObjectCommand } = require('@aws-sdk/client-s3');
-const { File, Event, sequelize } = require('../models');
-const { Op } = require('sequelize');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-// R2 客户端配置（与后端保持一致）
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
+const { HeadObjectCommand } = require('@aws-sdk/client-s3');
+const { r2Client, r2Config } = require('../config/r2');
+const { File, Event, sequelize } = require('../models');
+const { Op } = require('sequelize');
 
 (async () => {
   console.log('=== 开始迁移清理 orphan 文件 ===');
@@ -25,7 +17,7 @@ const r2Client = new S3Client({
   for (const file of files) {
     processed++;
     // 检查对象是否仍然存在 R2 中
-    const headCmd = new HeadObjectCommand({ Bucket: process.env.R2_BUCKET, Key: file.key });
+    const headCmd = new HeadObjectCommand({ Bucket: r2Config.bucket, Key: file.key });
     let exists = true;
     try {
       await r2Client.send(headCmd);

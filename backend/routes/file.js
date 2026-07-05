@@ -1,26 +1,19 @@
 const express = require('express');
 const auth = require('../middleware/auth');
-const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { r2Client, r2Config } = require('../config/r2');
 const { File, Event, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 const router = express.Router();
 
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
-
 // 删除文件（根据文件 ID）
 router.delete('/:id', auth, async (req, res) => {
   const fileId = req.params.id;
   const transaction = await sequelize.transaction();
+  let fileRecord;
   try {
-    const fileRecord = await File.findByPk(fileId, { transaction });
+    fileRecord = await File.findByPk(fileId, { transaction });
     if (!fileRecord) {
       await transaction.rollback();
       return res.status(404).json({ message: '文件未找到' });
@@ -44,7 +37,7 @@ router.delete('/:id', auth, async (req, res) => {
 
     // 1️⃣ 删除 R2 对象（先执行，失败则回滚）
     const command = new DeleteObjectCommand({
-      Bucket: process.env.R2_BUCKET,
+      Bucket: r2Config.bucket,
       Key: fileRecord.key,
     });
     await r2Client.send(command);

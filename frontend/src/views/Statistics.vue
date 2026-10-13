@@ -74,16 +74,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted } from 'vue'
 import Layout from '../components/Layout.vue'
-import { useUserStore } from '../store/modules/user'
 import axios from '../utils/axios'
-import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-
-const router = useRouter()
-const userStore = useUserStore()
 
 const filterForm = reactive({
   dateRange: [],

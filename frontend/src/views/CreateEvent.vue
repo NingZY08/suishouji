@@ -90,7 +90,6 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Layout from '../components/Layout.vue'
 import { useEventStore } from '../store/modules/event'
-import { useUserStore } from '../store/modules/user'
 import axios from '../utils/axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -101,8 +100,6 @@ interface Category {
   level: number
   children?: Category[]
 }
-
-const userStore = useUserStore()
 
 const router = useRouter()
 const route = useRoute()
@@ -197,7 +194,7 @@ const updateCategoryId = () => {
   }
 }
 
-const handleFileChange = (file: any, files: any) => {
+const handleFileChange = (_file: any, files: any) => {
   fileList.value = files.map((f: any) => {
     const existing = fileList.value.find(item => item.uid === f.uid)
     return {
@@ -208,31 +205,6 @@ const handleFileChange = (file: any, files: any) => {
       id: existing?.id
     }
   })
-}
-
-const handleUploadSuccess = (response: any, file: any) => {
-  console.log('上传成功，响应:', response)
-  console.log('上传成功，文件:', file)
-
-  if (response && response.url) {
-    // 将文件信息加入列表，包含文件 ID（用于后续删除）以及 uid
-    fileList.value.push({
-      name: file.name,
-      url: response.url,
-      id: response.fileId,
-      uid: file.uid
-    })
-    eventForm.files.push(response.url)
-    // 根据是否重复给出不同提示
-    if (response.duplicate) {
-      ElMessage.warning(`文件 ${file.name} 已存在，使用已有文件`)
-    } else {
-      ElMessage.success(`文件 ${file.name} 上传成功`)
-    }
-  } else {
-    console.error('上传响应格式错误:', response)
-    ElMessage.error('上传响应格式错误')
-  }
 }
 
 const handleRemove = (file: any) => {
@@ -416,24 +388,6 @@ const handleSubmit = async () => {
       }
     }
   })
-}
-
-const handleLogout = async () => {
-  try {
-    await ElMessageBox.confirm('确定要登出吗？', '登出确认', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'info'
-    })
-    userStore.logout()
-    ElMessage.success('登出成功')
-    router.push('/login')
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('登出失败:', error)
-      ElMessage.error('登出失败')
-    }
-  }
 }
 
 onMounted(() => {

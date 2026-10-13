@@ -31,13 +31,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import Layout from '../components/Layout.vue'
 import { useUserStore } from '../store/modules/user'
 import axios from '../utils/axios'
 import { ElMessage } from 'element-plus'
 
-const router = useRouter()
 const userStore = useUserStore()
 const profileFormRef = ref()
 const loading = ref(false)
@@ -59,7 +57,7 @@ const rules = {
   ],
   confirmPassword: [
     {
-      validator: (rule: any, value: any, callback: any) => {
+      validator: (_rule: any, value: any, callback: any) => {
         if (value && value !== profileForm.password) {
           callback(new Error('两次输入的密码不一致'))
         } else {

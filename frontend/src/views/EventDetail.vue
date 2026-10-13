@@ -94,17 +94,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { Document, Picture, Grid, Files } from '@element-plus/icons-vue'
 import Layout from '../components/Layout.vue'
-import { useUserStore } from '../store/modules/user'
 import axios from '../utils/axios'
 import { ElMessage } from 'element-plus'
 
-const userStore = useUserStore()
-
 const route = useRoute()
-const router = useRouter()
 const eventId = ref(route.params.id as string)
 
 const eventDetail = ref({

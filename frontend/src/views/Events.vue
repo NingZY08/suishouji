@@ -127,14 +127,11 @@ import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import Layout from '../components/Layout.vue'
 import { useEventStore } from '../store/modules/event'
-import { useUserStore } from '../store/modules/user'
 import axios from '../utils/axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import * as XLSX from 'xlsx'
 
 const router = useRouter()
 const eventStore = useEventStore()
-const userStore = useUserStore()
 
 const searchForm = reactive({
   keyword: '',
@@ -319,24 +316,6 @@ const exportToExcel = async () => {
   } catch (error) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
-  }
-}
-
-const handleLogout = async () => {
-  try {
-    await ElMessageBox.confirm('确定要登出吗？', '登出确认', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'info'
-    })
-    userStore.logout()
-    ElMessage.success('登出成功')
-    router.push('/login')
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('登出失败:', error)
-      ElMessage.error('登出失败')
-    }
   }
 }
 

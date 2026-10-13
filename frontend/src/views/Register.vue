@@ -61,7 +61,7 @@ const rules = {
   confirmPassword: [
     { required: true, message: '请确认密码', trigger: 'blur' },
     {
-      validator: (rule: any, value: any, callback: any) => {
+      validator: (_rule: any, value: any, callback: any) => {
         if (value !== registerForm.password) {
           callback(new Error('两次输入的密码不一致'))
         } else {

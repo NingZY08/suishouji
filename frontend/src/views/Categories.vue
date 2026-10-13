@@ -22,7 +22,7 @@
         :highlight-current="true"
         class="category-tree"
       >
-        <template #default="{ node, data }">
+        <template #default="{ data }">
           <div class="tree-node">
             <span>{{ data.name }}</span>
             <span class="node-level-tag">
@@ -160,7 +160,6 @@ const parentOptions = computed(() => {
   }
   if (categoryForm.level === 3) {
     // 找到当前选中的二级分类的父级一级分类
-    let parentCategory = null
     for (const level1 of categoryTree.value) {
       for (const level2 of level1.children || []) {
         if (level2.id === categoryForm.parentId) {

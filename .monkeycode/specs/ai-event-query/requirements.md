@@ -25,7 +25,7 @@ Updated: 2026-10-17
 #### Acceptance Criteria
 
 1. WHEN 用户在 AI 设置页填写 Base URL、API Key、模型名并点击保存, THE 系统 SHALL 将 API Key 以 AES-256-GCM 加密后写入 ai_configs 表, 并返回保存成功提示。
-2. WHEN 用户打开 AI 设置页且配置已存在, THE 系统 SHALL 回显 Base URL 与模型名, 并以占位符形式展示 Key 状态（明文 Key 原样返回）。
+2. WHEN 用户打开 AI 设置页且配置已存在, THE 系统 SHALL 回显 Base URL 与模型名, 并以脱敏形式展示 API Key（仅末 4 位）。
 3. WHEN 用户点击「测试连接」, THE 系统 SHALL 使用当前表单配置向 LLM 服务发送一条最小对话请求, 并在 10 秒内显示连接成功或失败原因。
 4. IF Base URL 为空、API Key 为空或模型名为空, THE 系统 SHALL 阻止保存并提示对应字段必填。
 5. IF LLM 服务返回 401、404、429 或网络超时, THE 系统 SHALL 在测试连接结果中显示对应的服务商错误信息。

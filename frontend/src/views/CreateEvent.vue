@@ -31,10 +31,22 @@
           </el-row>
         </el-form-item>
         <el-form-item label="开始日期" prop="startDate">
-          <el-date-picker v-model="eventForm.startDate" type="date" placeholder="选择开始日期"></el-date-picker>
+          <el-date-picker
+            v-model="eventForm.startDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            :disabled-date="disabledStartDate"
+            placeholder="选择开始日期"
+          ></el-date-picker>
         </el-form-item>
         <el-form-item label="结束日期" prop="endDate">
-          <el-date-picker v-model="eventForm.endDate" type="date" placeholder="选择结束日期"></el-date-picker>
+          <el-date-picker
+            v-model="eventForm.endDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            :disabled-date="disabledEndDate"
+            placeholder="选择结束日期"
+          ></el-date-picker>
         </el-form-item>
         <el-form-item label="事件状态" prop="status">
           <el-select v-model="eventForm.status" placeholder="选择状态">
@@ -77,7 +89,7 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSubmit" :loading="loading">保存</el-button>
-          <el-button @click="$router.push('/events')">取消</el-button>
+          <el-button @click="goBackToList">取消</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -91,6 +103,7 @@ import { useRouter, useRoute } from 'vue-router'
 import Layout from '../components/Layout.vue'
 import { useEventStore } from '../store/modules/event'
 import axios from '../utils/axios'
+import { toMediaUrl } from '../utils/fileUrl'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
@@ -138,11 +151,45 @@ const rules = {
     { max: 100, message: '标题长度不能超过100个字符', trigger: 'blur' }
   ],
   startDate: [
-    { required: true, message: '请选择开始日期', trigger: 'change' }
+    { required: true, message: '请选择开始日期', trigger: 'change' },
+    {
+      validator: (_rule: any, value: string, callback: any) => {
+        if (value && eventForm.endDate && value > eventForm.endDate) {
+          callback(new Error('开始日期不能晚于结束日期'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
+  ],
+  endDate: [
+    {
+      validator: (_rule: any, value: string, callback: any) => {
+        if (value && eventForm.startDate && value < eventForm.startDate) {
+          callback(new Error('结束日期不能早于开始日期'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
   ],
   status: [
     { required: true, message: '请选择事件状态', trigger: 'change' }
   ]
+}
+
+// 日期联动禁选：已选结束日期后，开始日期面板中晚于结束日期的日期置灰；
+// 已选开始日期后，结束日期面板中早于开始日期的日期置灰。
+const disabledStartDate = (date: Date) => {
+  if (!eventForm.endDate) return false
+  return date.getTime() > new Date(`${eventForm.endDate}T23:59:59`).getTime()
+}
+
+const disabledEndDate = (date: Date) => {
+  if (!eventForm.startDate) return false
+  return date.getTime() < new Date(`${eventForm.startDate}T00:00:00`).getTime()
 }
 
 const level1Options = computed(() => {
@@ -200,6 +247,7 @@ const handleFileChange = (_file: any, files: any) => {
     return {
       name: f.name,
       url: f.url || '',
+      remoteUrl: existing?.remoteUrl || '',
       raw: f.raw,
       uid: f.uid,
       id: existing?.id
@@ -209,6 +257,7 @@ const handleFileChange = (_file: any, files: any) => {
 
 const handleRemove = (file: any) => {
   const index = fileList.value.findIndex(item => {
+    if (file.remoteUrl && item.remoteUrl === file.remoteUrl) return true
     if (file.url && item.url === file.url) return true
     if (file.uid && item.uid === file.uid) return true
     if (file.id && item.id === file.id) return true
@@ -216,6 +265,12 @@ const handleRemove = (file: any) => {
   })
   if (index === -1) return
   const removed = fileList.value[index]
+  const canonicalUrl = removed.remoteUrl || removed.url
+
+  const removeFromForm = () => {
+    const urlIdx = eventForm.files.indexOf(canonicalUrl)
+    if (urlIdx !== -1) eventForm.files.splice(urlIdx, 1)
+  }
 
   if (removed.id) {
     ElMessageBox.confirm('确定要删除该文件吗？此操作不可恢复。', '删除确认', {
@@ -226,15 +281,11 @@ const handleRemove = (file: any) => {
       try {
         const resp = await axios.delete(`/api/file/${removed.id}`)
         const { referenced } = resp.data
+        fileList.value.splice(index, 1)
+        removeFromForm()
         if (referenced) {
-          fileList.value.splice(index, 1)
-          const urlIdx = eventForm.files.indexOf(removed.url)
-          if (urlIdx !== -1) eventForm.files.splice(urlIdx, 1)
           ElMessage.warning('文件被其他事件引用，仅在当前编辑中移除')
         } else {
-          fileList.value.splice(index, 1)
-          const urlIdx = eventForm.files.indexOf(removed.url)
-          if (urlIdx !== -1) eventForm.files.splice(urlIdx, 1)
           ElMessage.success('文件已删除')
         }
       } catch (e: any) {
@@ -247,11 +298,24 @@ const handleRemove = (file: any) => {
     })
   } else {
     fileList.value.splice(index, 1)
+    removeFromForm()
+  }
+}
+
+// 计算文件 SHA-256（用于去重，失败时忽略）
+const sha256Hex = async (raw: File): Promise<string | undefined> => {
+  try {
+    if (!window.crypto?.subtle) return undefined
+    const buffer = await raw.arrayBuffer()
+    const digest = await window.crypto.subtle.digest('SHA-256', buffer)
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')
+  } catch (e) {
+    return undefined
   }
 }
 
 const submitUpload = async () => {
-  const uploadFiles = fileList.value.filter(f => !f.url || !f.url.startsWith('https://'))
+  const uploadFiles = fileList.value.filter(f => f.raw && !f.remoteUrl)
 
   if (uploadFiles.length === 0) {
     ElMessage.info('没有需要上传的文件')
@@ -261,36 +325,68 @@ const submitUpload = async () => {
   uploading.value = true
 
   try {
-    const uploadPromises = uploadFiles.map(async (file) => {
-      const formData = new FormData()
-      formData.append('file', file.raw)
+    for (const file of uploadFiles) {
+      const raw: File = file.raw
+      const hash = await sha256Hex(raw)
+      let uploadedUrl = ''
+      let fileId: number | undefined
+      let duplicate = false
 
-      const response = await axios.post('/api/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      })
+      try {
+        // 优先走服务端上传（本地/服务器部署，后端可直连 R2）
+        const formData = new FormData()
+        formData.append('file', raw)
 
-      return { file, response }
-    })
+        const response = await axios.post('/api/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        })
 
-    const results = await Promise.all(uploadPromises)
+        uploadedUrl = response.data.url
+        fileId = response.data.fileId
+        duplicate = !!response.data.duplicate
+      } catch (err: any) {
+        // 后端无法访问 R2 S3 API 时（如云端沙箱），降级为浏览器预签名直传
+        const fallback = err?.response?.data
+        if (fallback?.fallback !== 'direct' || !fallback?.uploadUrl) {
+          throw err
+        }
+        const putRes = await fetch(fallback.uploadUrl, {
+          method: 'PUT',
+          body: raw,
+          headers: { 'Content-Type': fallback.contentType }
+        }).catch(() => undefined)
+        if (!putRes || !putRes.ok) {
+          throw new Error(`浏览器直传 R2 失败：请在可访问 R2 的环境中执行 npm run r2:cors 配置存储桶 CORS 后重试`)
+        }
+        const completeRes = await axios.post('/api/upload/complete', {
+          key: fallback.key,
+          size: raw.size,
+          hash
+        })
+        uploadedUrl = completeRes.data.url || fallback.publicUrl
+        fileId = completeRes.data.fileId
+        duplicate = !!completeRes.data.duplicate
+      }
 
-    for (const { file, response } of results) {
-      if (response.data && response.data.url) {
-        const index = fileList.value.findIndex(f => f.name === file.name)
-        if (index !== -1) {
-          fileList.value[index].url = response.data.url
-          fileList.value[index].id = response.data.fileId
+      if (!uploadedUrl) continue
+
+      const index = fileList.value.findIndex(f => f.uid === file.uid)
+      if (index !== -1) {
+        fileList.value[index].url = toMediaUrl(uploadedUrl)
+        fileList.value[index].remoteUrl = uploadedUrl
+        if (fileId) {
+          fileList.value[index].id = fileId
         }
-        if (!eventForm.files.includes(response.data.url)) {
-          eventForm.files.push(response.data.url)
-        }
-        if (response.data.duplicate) {
-          ElMessage.warning(`文件 ${file.name} 已存在，使用已有文件`)
-        } else {
-          ElMessage.success(`文件 ${file.name} 上传成功`)
-        }
+      }
+      if (!eventForm.files.includes(uploadedUrl)) {
+        eventForm.files.push(uploadedUrl)
+      }
+      if (duplicate) {
+        ElMessage.warning(`文件 ${file.name} 已存在，使用已有文件`)
+      } else {
+        ElMessage.success(`文件 ${file.name} 上传成功`)
       }
     }
 
@@ -308,15 +404,16 @@ const handleExceed = () => {
 }
 
 const handlePreview = (file: any) => {
-  const url = file.url || (file.response && file.response.url)
-  if (url) {
-    const ext = '.' + (url.split('?')[0].split('.').pop() || '').toLowerCase()
+  const remote = file.remoteUrl || file.url || ''
+  const displayUrl = file.url || ''
+  if (remote) {
+    const ext = '.' + (remote.split('?')[0].split('.').pop() || '').toLowerCase()
     const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
     if (imageExts.includes(ext)) {
-      previewUrl.value = url
+      previewUrl.value = displayUrl
       previewVisible.value = true
     } else {
-      window.open(url, '_blank')
+      window.open(displayUrl, '_blank')
     }
   }
 }
@@ -338,9 +435,16 @@ const fetchEventDetail = async (id: string) => {
     const metaMap = new Map((response.data.fileMeta || []).map((item: any) => [item.url, item.id]));
     fileList.value = (event.files || []).map((url: string) => {
       const id = metaMap.get(url);
+      let name = url.split('/').pop() || 'file';
+      try {
+        name = decodeURIComponent(name);
+      } catch (e) {
+        // 文件名含非法编码时保留原样
+      }
       return {
-        name: decodeURIComponent(url.split('/').pop() || 'file'),
-        url,
+        name,
+        url: toMediaUrl(url),
+        remoteUrl: url,
         id // 可能为 undefined
       };
     });
@@ -379,7 +483,8 @@ const handleSubmit = async () => {
           ElMessage.success('创建成功')
           eventStore.addEvent(response.data)
         }
-        router.push('/events')
+        // 返回列表，保持之前的分页位置
+        goBackToList()
       } catch (error) {
         console.error('保存失败:', error)
         ElMessage.error('保存失败，请稍后重试')
@@ -388,6 +493,12 @@ const handleSubmit = async () => {
       }
     }
   })
+}
+
+// 返回列表时带上之前浏览的页码，保持分页位置
+const goBackToList = () => {
+  const savedPage = sessionStorage.getItem('eventsPage')
+  router.push({ path: '/events', query: savedPage && savedPage !== '1' ? { page: savedPage } : {} })
 }
 
 onMounted(() => {

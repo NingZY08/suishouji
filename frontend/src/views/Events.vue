@@ -123,14 +123,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, nextTick, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import Layout from '../components/Layout.vue'
 import { useEventStore } from '../store/modules/event'
 import axios from '../utils/axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
+const route = useRoute()
 const eventStore = useEventStore()
 
 const searchForm = reactive({
@@ -141,9 +142,13 @@ const searchForm = reactive({
 
 const typeOptions = ref<string[]>([])
 
+const ALLOWED_PAGE_SIZES = [10, 20, 50, 100]
+
+// 从 sessionStorage 还原每页条数，查看详情/编辑返回后不丢设置
+const storedPageSize = Number(sessionStorage.getItem('eventsPageSize'))
 const pagination = reactive({
   currentPage: 1,
-  pageSize: 10,
+  pageSize: ALLOWED_PAGE_SIZES.includes(storedPageSize) ? storedPageSize : 10,
   total: 0
 })
 
@@ -173,6 +178,7 @@ const fetchTypeOptions = async () => {
 
 const handleSearch = async () => {
   pagination.currentPage = 1
+  persistPage()
   await fetchEvents()
 }
 
@@ -181,18 +187,41 @@ const resetSearch = () => {
   searchForm.type = ''
   searchForm.status = ''
   pagination.currentPage = 1
+  persistPage()
   fetchEvents()
 }
 
 const handleSizeChange = (size: number) => {
   pagination.pageSize = size
+  sessionStorage.setItem('eventsPageSize', String(size))
+  persistPage()
   fetchEvents()
 }
 
 const handleCurrentChange = (current: number) => {
   pagination.currentPage = current
+  persistPage()
   fetchEvents()
 }
+
+// 把当前页码同步到地址栏（/events?page=N），组件销毁后页码仍保存在 URL 里；
+// 同时写入 sessionStorage，供“新建/编辑保存后返回列表”时使用。
+const persistPage = () => {
+  const page = String(pagination.currentPage)
+  sessionStorage.setItem('eventsPage', page)
+  if (route.query.page !== page) {
+    router.replace({ query: { ...route.query, page } })
+  }
+}
+
+// 通过浏览器前进/后退回到本页时（组件被复用、不重新挂载），同步页码并刷新列表
+watch(() => route.query.page, (val) => {
+  const page = Number(Array.isArray(val) ? val[0] : val)
+  if (Number.isInteger(page) && page > 0 && page !== pagination.currentPage) {
+    pagination.currentPage = page
+    fetchEvents()
+  }
+})
 
 const fetchEvents = async () => {
   try {
@@ -320,6 +349,11 @@ const exportToExcel = async () => {
 }
 
 onMounted(() => {
+  // 从地址栏还原页码：查看详情后返回时，URL 仍是 /events?page=N，据此恢复分页位置
+  const page = Number(Array.isArray(route.query.page) ? route.query.page[0] : route.query.page)
+  if (Number.isInteger(page) && page > 0) {
+    pagination.currentPage = page
+  }
   fetchTypeOptions()
   fetchEvents()
 })

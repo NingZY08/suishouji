@@ -31,8 +31,26 @@
               <span>个人中心</span>
             </router-link>
           </li>
+          <li>
+            <router-link to="/ai-settings" class="nav-link" @click="handleNavClick">
+              <el-icon><MagicStick /></el-icon>
+              <span>AI 设置</span>
+            </router-link>
+          </li>
+          <li v-if="userStore.isAdmin">
+            <router-link to="/admin/users" class="nav-link" @click="handleNavClick">
+              <el-icon><Setting /></el-icon>
+              <span>用户管理</span>
+            </router-link>
+          </li>
         </ul>
       </nav>
+      <div v-if="!isMobile" class="sidebar-footer">
+        <button class="logout-btn" @click="handleLogout">
+          <el-icon><SwitchButton /></el-icon>
+          <span>登出</span>
+        </button>
+      </div>
     </aside>
     <main class="main-content">
       <header class="main-header">
@@ -42,22 +60,25 @@
           </el-button>
         </div>
         <div class="header-right">
-          <el-button @click="handleLogout">登出</el-button>
+          <el-button v-if="isMobile" @click="handleLogout">登出</el-button>
         </div>
       </header>
       <div class="content">
         <slot></slot>
       </div>
     </main>
+    <AiChat />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Calendar, List, DataAnalysis, User, Menu } from '@element-plus/icons-vue'
+import { Calendar, List, DataAnalysis, User, Menu, SwitchButton, MagicStick, Setting } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../store/modules/user'
 import { ElMessage } from 'element-plus'
+import axios from '../utils/axios'
+import AiChat from './AiChat.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -91,7 +112,20 @@ const handleLogout = () => {
 onMounted(() => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  refreshRole()
 })
+
+// 同步最新 role/username；兼容旧登录态（localStorage 的 userInfo 缺 role）
+const refreshRole = async () => {
+  if (!userStore.token) return
+  try {
+    const { data } = await axios.get('/api/user/profile')
+    console.log('[Layout] profile 同步: role =', data.role)
+    userStore.setUserInfo({ ...userStore.userInfo, ...data })
+  } catch (err: any) {
+    console.log('[Layout] profile 同步失败:', err.response?.status, err.message)
+  }
+}
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
@@ -170,6 +204,34 @@ onUnmounted(() => {
 }
 
 .nav-link el-icon {
+  margin-right: 10px;
+  font-size: 16px;
+}
+
+.sidebar-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #34495e;
+}
+
+.logout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  color: #ecf0f1;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+  background-color: #34495e;
+  color: white;
+}
+
+.logout-btn .el-icon {
   margin-right: 10px;
   font-size: 16px;
 }

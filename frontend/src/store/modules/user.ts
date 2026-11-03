@@ -6,6 +6,7 @@ interface UserState {
     id: number
     username: string
     email: string
+    role?: 'user' | 'admin'
   } | null
 }
 
@@ -14,6 +15,9 @@ export const useUserStore = defineStore('user', {
     token: localStorage.getItem('token'),
     userInfo: localStorage.getItem('userInfo') ? JSON.parse(localStorage.getItem('userInfo')!) : null
   }),
+  getters: {
+    isAdmin: (state) => state.userInfo?.role === 'admin'
+  },
   actions: {
     setToken(token: string) {
       this.token = token

@@ -12,7 +12,7 @@ const Event = sequelize.define('Event', {
     allowNull: false,
     field: 'user_id',
     references: {
-      model: 'Users',
+      model: 'users',
       key: 'id'
     }
   },

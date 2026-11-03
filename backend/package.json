@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "migrate": "node scripts/migrate_orphan_files.js"
+    "migrate": "node scripts/migrate_orphan_files.js",
+    "r2:cors": "node scripts/set-r2-cors.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",

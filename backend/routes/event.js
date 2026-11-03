@@ -138,6 +138,12 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, [
   body('title').isLength({ min: 1, max: 100 }).withMessage('标题长度在1到100个字符之间'),
   body('startDate').notEmpty().withMessage('请选择开始日期'),
+  body('endDate').custom((endDate, { req }) => {
+    if (endDate && req.body.startDate && String(endDate).slice(0, 10) < String(req.body.startDate).slice(0, 10)) {
+      throw new Error('结束日期不能早于开始日期');
+    }
+    return true;
+  }),
   body('status').isIn(['进行中', '已完成', '已取消']).withMessage('状态必须是进行中、已完成或已取消')
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -213,6 +219,12 @@ router.post('/', auth, [
 router.put('/:id', auth, [
   body('title').isLength({ min: 1, max: 100 }).withMessage('标题长度在1到100个字符之间'),
   body('startDate').notEmpty().withMessage('请选择开始日期'),
+  body('endDate').custom((endDate, { req }) => {
+    if (endDate && req.body.startDate && String(endDate).slice(0, 10) < String(req.body.startDate).slice(0, 10)) {
+      throw new Error('结束日期不能早于开始日期');
+    }
+    return true;
+  }),
   body('status').isIn(['进行中', '已完成', '已取消']).withMessage('状态必须是进行中、已完成或已取消')
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -230,6 +242,12 @@ router.put('/:id', auth, [
     if (!event) {
       return res.status(404).json({ message: '事件不存在' });
     }
+
+    // 更新审计：记录关键字段修改前后的值，便于追溯意外改动
+    console.log(`[audit] 用户${req.user.userId} 更新事件 ${event.id}「${event.title}」: `
+      + `start_date ${event.startDate} -> ${startDate}; `
+      + `end_date ${event.endDate} -> ${endDate}; `
+      + `status ${event.status} -> ${status}`);
 
     let finalCategoryId = categoryId;
 

@@ -22,11 +22,18 @@ const app = express();
 
 // 中间件
 app.use(cors());
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: false
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb', parameterLimit: 50000 }));
 
 // 静态文件服务（已迁移到 Cloudflare R2）
+
+// 同源图片/媒体代理：浏览器经此后端以同源方式访问 R2 对象，
+// 规避预览环境的跨域/CSP 限制与文件名编码问题。放在限流之前，避免图片请求消耗 API 配额。
+app.use('/api/media', require('./routes/media'));
 
 // 速率限制
 const limiter = rateLimit({
@@ -35,22 +42,8 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// 认证中间件
-const auth = (req, res, next) => {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ message: '未提供认证令牌' });
-  }
-  
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: '无效的认证令牌' });
-  }
-};
+// 认证中间件统一使用 ./middleware/auth（查库校验 token_version 与角色）
+const auth = require('./middleware/auth');
 
 // 注册路由
 app.post('/api/auth/register', async (req, res) => {
@@ -93,12 +86,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, tv: user.tokenVersion },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email } });
+
+    res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
   } catch (error) {
     console.error('登录失败:', error);
     res.status(500).json({ message: '登录失败，请稍后重试' });
@@ -107,11 +100,13 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 注册模块化路由
 app.use('/api/user', require('./routes/user'));
+app.use('/api/admin', require('./routes/admin'));
 app.use('/api/events', require('./routes/event'));
 app.use('/api/categories', require('./routes/category'));
 app.use('/api/file', require('./routes/file'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/statistics', require('./routes/statistics'));
+app.use('/api/ai', require('./routes/ai'));
 
 // 健康检查
 app.get('/health', (req, res) => {

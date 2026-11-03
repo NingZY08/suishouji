@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
+import axios from '../utils/axios'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -50,6 +51,18 @@ const routes: RouteRecordRaw[] = [
     name: 'Categories',
     component: () => import('../views/Categories.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/ai-settings',
+    name: 'AiSettings',
+    component: () => import('../views/AiSettings.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin/users',
+    name: 'AdminUsers',
+    component: () => import('../views/AdminUsers.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
   }
 ]
 
@@ -59,17 +72,36 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('token')
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!token) {
       next({ name: 'Login' })
-    } else {
-      next()
+      return
     }
-  } else {
-    next()
   }
+
+  if (to.meta.requiresAdmin) {
+    const stored = localStorage.getItem('userInfo')
+    let role: string | undefined = stored ? JSON.parse(stored)?.role : undefined
+    // 存量登录缺 role 时补拉一次 profile 再判定
+    if (!role && token) {
+      try {
+        const { data } = await axios.get('/api/user/profile')
+        role = data.role
+        localStorage.setItem('userInfo', JSON.stringify({ ...(stored ? JSON.parse(stored) : {}), ...data }))
+      } catch (_) {
+        next('/events')
+        return
+      }
+    }
+    if (role !== 'admin') {
+      next('/events')
+      return
+    }
+  }
+
+  next()
 })
 
 export default router

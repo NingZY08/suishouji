@@ -8,8 +8,7 @@
             <div class="header-actions">
               <el-button type="primary" @click="$router.push(`/create?id=${eventId}`)">编辑</el-button>
             </div>
-          </div>
-        </template>
+          </div>        </template>
       <div class="event-detail-content">
         <div class="detail-card">
           <div class="detail-row">
@@ -54,6 +53,7 @@
                   :key="'img-' + index"
                   :src="file.url"
                   :preview-src-list="imageFileUrls"
+                  referrerpolicy="no-referrer"
                   fit="cover"
                   class="event-file-item"
                 ></el-image>
@@ -78,14 +78,14 @@
                     </el-button>
                   </div>
                 </div>
-                <div v-if="eventDetail.files.length === 0" class="no-files">无相关文件</div>
+                <div v-if="!eventDetail.files || eventDetail.files.length === 0" class="no-files">无相关文件</div>
               </div>
             </div>
           </div>
         </div>
       </div>
       <div class="event-detail-actions">
-        <el-button @click="$router.push('/events')">返回列表</el-button>
+        <el-button @click="goBackToList">返回列表</el-button>
       </div>
     </el-card>
   </div>
@@ -94,14 +94,26 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Document, Picture, Grid, Files } from '@element-plus/icons-vue'
 import Layout from '../components/Layout.vue'
 import axios from '../utils/axios'
+import { toMediaUrl } from '../utils/fileUrl'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const eventId = ref(route.params.id as string)
+
+// 返回列表：从列表页进入时用历史回退，可还原翻页前的 /events?page=N；
+// 直接打开详情页（无历史记录）时兜底跳转到列表第一页
+const goBackToList = () => {
+  if (window.history.state && window.history.state.back != null) {
+    router.back()
+  } else {
+    router.push('/events')
+  }
+}
 
 const eventDetail = ref({
   id: '',
@@ -129,44 +141,37 @@ const fetchEventDetail = async () => {
   }
 }
 
-const getFileUrl = (file: string) => {
-  // 如果已经是完整 URL，直接返回
-  if (file.startsWith('http://') || file.startsWith('https://')) {
-    return file
-  }
-  // 开发环境：使用相对路径，通过 Vite 代理访问
-  // 生产环境：根据环境变量决定是否拼接完整 URL
-  const isDev = (import.meta as any).env.DEV
-  if (isDev) {
-    return file // 开发环境使用相对路径，走代理
-  }
-  // 生产环境使用完整 URL
-  const baseUrl = (import.meta as any).env.VITE_API_BASE_URL || ''
-  return baseUrl ? `${baseUrl}${file}` : file
-}
+const getFileUrl = (file: string) => toMediaUrl(file)
 
 // 图片格式列表
 const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
 
 // 判断是否为图片文件
 const isImageFile = (file: string) => {
-  const ext = '.' + file.split('.').pop()?.toLowerCase()
+  const clean = String(file).split('?')[0].split('#')[0]
+  const ext = '.' + clean.split('.').pop()?.toLowerCase()
   return imageExts.includes(ext)
 }
 
 // 获取文件扩展名
 const getFileExt = (file: string) => {
-  return '.' + file.split('.').pop()?.toLowerCase()
+  const clean = String(file).split('?')[0].split('#')[0]
+  return '.' + clean.split('.').pop()?.toLowerCase()
 }
 
 // 获取文件名
 const getFileName = (file: string) => {
-  return file.split('/').pop() || file
+  const name = String(file).split('?')[0].split('/').pop() || file
+  try {
+    return decodeURIComponent(name)
+  } catch (e) {
+    return name
+  }
 }
 
 // 图片文件列表（带完整 URL）
 const imageFiles = computed(() => {
-  return eventDetail.value.files
+  return (eventDetail.value.files || [])
     .filter(isImageFile)
     .map(file => ({
       url: getFileUrl(file),
@@ -181,7 +186,7 @@ const imageFileUrls = computed(() => {
 
 // 非图片文件列表（带完整 URL）
 const otherFiles = computed(() => {
-  return eventDetail.value.files
+  return (eventDetail.value.files || [])
     .filter(f => !isImageFile(f))
     .map(file => ({
       url: getFileUrl(file),

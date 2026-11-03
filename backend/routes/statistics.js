@@ -1,5 +1,6 @@
 const express = require('express');
-const { Op, sequelize } = require('sequelize');
+const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 const auth = require('../middleware/auth');
 const { Event } = require('../models');
 
@@ -13,11 +14,11 @@ router.get('/', auth, async (req, res) => {
     const where = { userId: req.user.userId };
 
     if (startDate) {
-      where.startDate = { [Op.gte]: startDate };
+      where.startDate = { [Op.gte]: String(startDate).slice(0, 10) };
     }
 
     if (endDate) {
-      where.endDate = { [Op.lte]: endDate };
+      where.endDate = { [Op.lte]: String(endDate).slice(0, 10) };
     }
 
     if (type) {
@@ -42,16 +43,16 @@ router.get('/', auth, async (req, res) => {
     const trend = await Event.findAll({
       where,
       attributes: [
-        [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
+        [sequelize.fn('DATE', sequelize.col('created_at')), 'date'],
         [sequelize.fn('COUNT', sequelize.col('id')), 'count']
       ],
-      group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
-      order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']]
+      group: [sequelize.fn('DATE', sequelize.col('created_at'))],
+      order: [[sequelize.fn('DATE', sequelize.col('created_at')), 'ASC']]
     });
 
     res.json({
       typeDistribution: typeDistribution.map(item => ({
-        name: item.typeLevel1,
+        name: item.typeLevel1 || '未分类',
         value: parseInt(item.dataValues.count)
       })),
       statusDistribution: statusDistribution.map(item => ({

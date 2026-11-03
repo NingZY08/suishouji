@@ -10,7 +10,7 @@ const router = express.Router();
 router.get('/profile', auth, async (req, res) => {
   try {
     const user = await User.findByPk(req.user.userId, {
-      attributes: ['id', 'username', 'email']
+      attributes: ['id', 'username', 'email', 'role']
     });
     if (!user) {
       return res.status(404).json({ message: '用户不存在' });
@@ -47,7 +47,7 @@ router.put('/profile', auth, [
 
     await user.save();
 
-    res.json({ id: user.id, username: user.username, email: user.email });
+    res.json({ id: user.id, username: user.username, email: user.email, role: user.role });
   } catch (error) {
     console.error('更新用户信息失败:', error);
     res.status(500).json({ message: '更新用户信息失败' });

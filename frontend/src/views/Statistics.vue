@@ -16,6 +16,7 @@
               range-separator="至"
               start-placeholder="开始日期"
               end-placeholder="结束日期"
+              value-format="YYYY-MM-DD"
               @change="handleDateChange"
             ></el-date-picker>
           </el-form-item>
@@ -77,6 +78,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import Layout from '../components/Layout.vue'
 import axios from '../utils/axios'
+import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
 const filterForm = reactive({
@@ -89,9 +91,7 @@ const statusChart = ref<echarts.ECharts | null>(null)
 const trendChart = ref<echarts.ECharts | null>(null)
 
 const handleDateChange = (val: any) => {
-  if (val) {
-    filterForm.dateRange = val
-  }
+  filterForm.dateRange = val || []
 }
 
 const handleSearch = () => {
@@ -111,8 +111,9 @@ const fetchStatistics = async () => {
     renderTypeChart(data.typeDistribution)
     renderStatusChart(data.statusDistribution)
     renderTrendChart(data.trend)
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取统计数据失败:', error)
+    ElMessage.error(error?.response?.data?.message || '获取统计数据失败，请稍后重试')
   }
 }
 
